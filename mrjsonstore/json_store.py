@@ -3,6 +3,7 @@
 
 import os
 import json
+from types import MappingProxyType
 from result import as_result
 from mrjsonstore.handle import Handle
 
@@ -31,3 +32,6 @@ class JsonStore:
 
     def transaction(self):
         return Handle(self, True)
+
+    def view(self):
+        return MappingProxyType(self.content)

@@ -200,3 +200,43 @@ def test_no_transaction_exception_modifying_data(tmp_path):
         assert len(x) == 2
         assert x['foo'] == 'bar'
         assert x['nested']['baz'] == 123
+
+def test_view(tmp_path):
+    filename = os.path.join(tmp_path, 'test.json')
+    store = JsonStore.make(filename)
+    assert is_ok(store)
+    store = store.unwrap()
+    with store() as x:
+        assert len(x) == 0
+
+        x['foo'] = 'bar'
+        x['nested'] = { 'baz': 123 }
+        assert x['foo'] == 'bar'
+        assert x['nested']['baz'] == 123
+
+    with store() as x:
+        assert len(x) == 2
+        assert x['foo'] == 'bar'
+        assert x['nested']['baz'] == 123
+        x['nested']['baz'] = 321
+
+    store_ = JsonStore.make(filename)
+    assert is_ok(store_)
+    store_ = store_.unwrap()
+
+    with store_() as x:
+        assert len(x) == 2
+        assert x['foo'] == 'bar'
+        assert x['nested']['baz'] == 321
+        x['nested']['baz'] = 1234
+        x['nested']['bar'] = 123
+
+    store__ = JsonStore.make(filename)
+    assert is_ok(store__)
+    store__ = store__.unwrap()
+
+    view = store__.view()
+    assert len(view) == 2
+    assert view['foo'] == 'bar'
+    assert view['nested']['baz'] == 1234
+    assert view['nested']['bar'] == 123
