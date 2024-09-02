@@ -17,21 +17,22 @@ class JsonStore:
         UnicodeDecodeError,
         json.JSONDecodeError
     )
-    def make(filename):
-        return JsonStore(filename)
+    def make(filename, dry_run=False):
+        return JsonStore(filename, dry_run)
 
-    def __init__(self, filename):
+    def __init__(self, filename, dry_run=False):
         self.filename = filename
+        self.dry_run = dry_run
         self.content = {}
         if os.path.exists(self.filename):
           with open(self.filename) as f:
               self.content = json.loads(f.read())
 
     def __call__(self):
-        return Handle(self, False)
+        return Handle(self, is_transaction=False, dry_run=self.dry_run)
 
     def transaction(self):
-        return Handle(self, True)
+        return Handle(self, is_transaction=True, dry_run=self.dry_run)
 
     def view(self):
         return MappingProxyType(self.content)
