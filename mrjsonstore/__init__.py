@@ -3,4 +3,4 @@
 
 from mrjsonstore.json_store import JsonStore
 
-__all__ = [ 'JsonStore' ]
+__all__ = ['JsonStore']

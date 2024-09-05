@@ -4,6 +4,7 @@
 import json
 from atomicwrites import atomic_write
 
+
 class Handle:
     def __init__(self, store, is_transaction, dry_run):
         self.store = store

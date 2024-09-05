@@ -7,6 +7,7 @@ from types import MappingProxyType
 from result import as_result
 from mrjsonstore.handle import Handle
 
+
 class JsonStore:
     @staticmethod
     @as_result(
@@ -16,7 +17,7 @@ class JsonStore:
         OSError,
         UnicodeDecodeError,
         json.JSONDecodeError
-    )
+        )
     def make(filename, dry_run=False):
         return JsonStore(filename, dry_run)
 
@@ -25,8 +26,8 @@ class JsonStore:
         self.dry_run = dry_run
         self.content = {}
         if os.path.exists(self.filename):
-          with open(self.filename) as f:
-              self.content = json.loads(f.read())
+            with open(self.filename) as f:
+                self.content = json.loads(f.read())
 
     def __call__(self):
         return Handle(self, is_transaction=False, dry_run=self.dry_run)
