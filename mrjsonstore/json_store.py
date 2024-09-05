@@ -35,4 +35,4 @@ class JsonStore:
         return Handle(self, is_transaction=True, dry_run=self.dry_run)
 
     def view(self):
-        return MappingProxyType(self.content)
+        return json.loads(json.dumps(self.content))
