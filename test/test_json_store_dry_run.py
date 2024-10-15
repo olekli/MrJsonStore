@@ -2,153 +2,269 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-from result import is_ok
-from mrjsonstore import JsonStore
+from mrjsonstore import JsonStore, Transaction
 
-def test_no_transaction_no_exception_dry_run(tmp_path):
-    filename = os.path.join(tmp_path, 'test.json')
-    store = JsonStore.make(filename, dry_run=True)
-    assert is_ok(store)
+import pytest
+
+
+@pytest.fixture(params=['test.json', 'test.yaml', 'test.yml'])
+def filename(request):
+    return request.param
+
+
+def test_no_rollback_no_exception_dry_run(tmp_path, filename):
+    filename = os.path.join(tmp_path, filename)
+    store = JsonStore(filename, dry_run=True)
+    assert store
     store = store.unwrap()
-    with store() as x:
-        assert len(x) == 0
+    with store.transaction(rollback=False) as t:
+        assert len(store.content) == 0
 
-        x['foo'] = 'bar'
-        x['nested'] = { 'baz': 123 }
-        assert x['foo'] == 'bar'
-        assert x['nested']['baz'] == 123
+        store.content['foo'] = 'bar'
+        store.content['nested'] = {'baz': 123}
+        assert store.content['foo'] == 'bar'
+        assert store.content['nested']['baz'] == 123
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
 
-    with store() as x:
-        assert len(x) == 2
-        assert x['foo'] == 'bar'
-        assert x['nested']['baz'] == 123
-        x['nested']['baz'] = 321
+    with store.transaction(rollback=False) as t:
+        assert len(store.content) == 2
+        assert store.content['foo'] == 'bar'
+        assert store.content['nested']['baz'] == 123
+        store.content['nested']['baz'] = 321
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
 
-    store_ = JsonStore.make(filename)
-    assert is_ok(store_)
+    store_ = JsonStore(filename, dry_run=True)
+    assert store_
     store_ = store_.unwrap()
 
-    with store_() as x:
-        assert len(x) == 0
+    with store_.transaction(rollback=False) as t:
+        assert len(store_.content) == 0
+        store_.content['nested'] = {}
+        store_.content['nested']['baz'] = 1234
+        store_.content['nested']['bar'] = 123
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
 
-def test_transaction_no_exception_dry_run(tmp_path):
-    filename = os.path.join(tmp_path, 'test.json')
-    store = JsonStore.make(filename, dry_run=True)
-    assert is_ok(store)
+    store__ = JsonStore(filename)
+    assert store__
+    store__ = store__.unwrap()
+
+    assert len(store__.content) == 0
+
+
+def test_rollback_no_exception_dry_run(tmp_path, filename):
+    filename = os.path.join(tmp_path, filename)
+    store = JsonStore(filename, dry_run=True)
+    assert store
     store = store.unwrap()
-    with store.transaction() as x:
-        assert len(x) == 0
+    with store.transaction(rollback=True) as t:
+        assert len(store.content) == 0
 
-        x['foo'] = 'bar'
-        x['nested'] = { 'baz': 123 }
-        assert x['foo'] == 'bar'
-        assert x['nested']['baz'] == 123
+        store.content['foo'] = 'bar'
+        store.content['nested'] = {'baz': 123}
+        assert store.content['foo'] == 'bar'
+        assert store.content['nested']['baz'] == 123
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
 
-    with store.transaction() as x:
-        assert len(x) == 2
-        assert x['foo'] == 'bar'
-        assert x['nested']['baz'] == 123
-        x['nested']['baz'] = 321
+    with store.transaction(rollback=True) as t:
+        assert len(store.content) == 2
+        assert store.content['foo'] == 'bar'
+        assert store.content['nested']['baz'] == 123
+        store.content['nested']['baz'] = 321
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
 
-    store_ = JsonStore.make(filename)
-    assert is_ok(store_)
+    store_ = JsonStore(filename, dry_run=True)
+    assert store_
     store_ = store_.unwrap()
 
-    with store_.transaction() as x:
-        assert len(x) == 0
+    with store_.transaction(rollback=True) as t:
+        assert len(store_.content) == 0
+        store_.content['nested'] = {}
+        store_.content['nested']['baz'] = 1234
+        store_.content['nested']['bar'] = 123
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
 
-def test_no_transaction_exception_dry_run(tmp_path):
-    filename = os.path.join(tmp_path, 'test.json')
-    store = JsonStore.make(filename, dry_run=True)
-    assert is_ok(store)
+    store__ = JsonStore(filename, dry_run=True)
+    assert store__
+    store__ = store__.unwrap()
+
+    assert len(store__.content) == 0
+
+
+def test_no_rollback_exception_dry_run(tmp_path, filename):
+    filename = os.path.join(tmp_path, filename)
+    store = JsonStore(filename, dry_run=True)
+    assert store
     store = store.unwrap()
     try:
-        with store() as x:
-            assert len(x) == 0
+        with store.transaction(rollback=False) as t:
+            assert len(store.content) == 0
 
-            x['foo'] = 'bar'
-            x['nested'] = { 'baz': 123 }
-            assert x['foo'] == 'bar'
-            assert x['nested']['baz'] == 123
+            store.content['foo'] = 'bar'
+            store.content['nested'] = {'baz': 123}
+            assert store.content['foo'] == 'bar'
+            assert store.content['nested']['baz'] == 123
+            raise RuntimeError()
+    except RuntimeError:
+        pass
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
+
+    with store.transaction(rollback=False) as t:
+        assert len(store.content) == 2
+        assert store.content['foo'] == 'bar'
+        assert store.content['nested']['baz'] == 123
+        store.content['nested']['baz'] = 321
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
+
+    store_ = JsonStore(filename, dry_run=True)
+    assert store_
+    store_ = store_.unwrap()
+
+    try:
+        with store_.transaction(rollback=False) as t:
+            assert len(store_.content) == 0
+            store_.content['nested'] = {}
+            store_.content['nested']['baz'] = 1234
+            store_.content['nested']['bar'] = 123
+            raise RuntimeError()
+    except RuntimeError:
+        pass
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
+
+    store__ = JsonStore(filename)
+    assert store__
+    store__ = store__.unwrap()
+
+    assert len(store__.content) == 0
+
+
+def test_rollback_exception_dry_run(tmp_path, filename):
+    filename = os.path.join(tmp_path, filename)
+    store = JsonStore(filename, dry_run=True)
+    assert store
+    store = store.unwrap()
+    try:
+        with store.transaction(rollback=True) as t:
+            assert len(store.content) == 0
+
+            store.content['foo'] = 'bar'
+            store.content['nested'] = {'baz': 123}
+            assert store.content['foo'] == 'bar'
+            assert store.content['nested']['baz'] == 123
+            raise RuntimeError()
+    except RuntimeError:
+        pass
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Rolledback
+
+    try:
+        with store.transaction(rollback=True) as t:
+            assert len(store.content) == 0
+            store.content['nested'] = {}
+            store.content['nested']['baz'] = 321
+            assert store.content['nested']['baz'] == 321
+            raise RuntimeError()
+    except RuntimeError:
+        pass
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Rolledback
+
+    store_ = JsonStore(filename, dry_run=True)
+    assert store_
+    store_ = store_.unwrap()
+
+    assert len(store_.content) == 0
+
+
+def test_no_rollback_exception_modifying_existing_data_dry_run(tmp_path, filename):
+    filename = os.path.join(tmp_path, filename)
+    store = JsonStore(filename)
+    assert store
+    store = store.unwrap()
+    with store.transaction() as t:
+        assert len(store.content) == 0
+
+        store.content['foo'] = 'bar'
+        store.content['nested'] = {'baz': 123}
+        assert store.content['foo'] == 'bar'
+        assert store.content['nested']['baz'] == 123
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
+
+    store = JsonStore(filename, dry_run=True)
+    assert store
+    store = store.unwrap()
+    try:
+        with store.transaction(rollback=False) as t:
+            assert len(store.content) == 2
+            assert store.content['foo'] == 'bar'
+            assert store.content['nested']['baz'] == 123
+            store.content['nested']['baz'] = 321
             raise RuntimeError()
     except RuntimeError as e:
         pass
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
 
-    try:
-        with store() as x:
-            assert len(x) == 2
-            assert x['foo'] == 'bar'
-            assert x['nested']['baz'] == 123
-            x['nested']['baz'] = 321
-            raise RuntimeError()
-    except RuntimeError as e:
-        pass
+    assert len(store.content) == 2
+    assert store.content['foo'] == 'bar'
+    assert store.content['nested']['baz'] == 321
 
-    store_ = JsonStore.make(filename)
-    assert is_ok(store_)
+    store_ = JsonStore(filename)
+    assert store_
     store_ = store_.unwrap()
 
-    with store_() as x:
-        assert len(x) == 0
+    assert len(store_.content) == 2
+    assert store_.content['foo'] == 'bar'
+    assert store_.content['nested']['baz'] == 123
 
-def test_transaction_exception(tmp_path):
-    filename = os.path.join(tmp_path, 'test.json')
-    store = JsonStore.make(filename, dry_run=True)
-    assert is_ok(store)
+
+def test_rollback_exception_modifying_existing_data_dry_run(tmp_path, filename):
+    filename = os.path.join(tmp_path, filename)
+    store = JsonStore(filename)
+    assert store
+    store = store.unwrap()
+    with store.transaction() as t:
+        assert len(store.content) == 0
+
+        store.content['foo'] = 'bar'
+        store.content['nested'] = {'baz': 123}
+        assert store.content['foo'] == 'bar'
+        assert store.content['nested']['baz'] == 123
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Committed
+
+    store = JsonStore(filename, dry_run=True)
+    assert store
     store = store.unwrap()
     try:
-        with store.transaction() as x:
-            assert len(x) == 0
-
-            x['foo'] = 'bar'
-            x['nested'] = { 'baz': 123 }
-            assert x['foo'] == 'bar'
-            assert x['nested']['baz'] == 123
+        with store.transaction(rollback=True) as t:
+            assert len(store.content) == 2
+            assert store.content['foo'] == 'bar'
+            assert store.content['nested']['baz'] == 123
+            store.content['nested']['baz'] = 321
             raise RuntimeError()
     except RuntimeError as e:
         pass
+    assert t.result
+    assert t.result.unwrap() == Transaction.State.Rolledback
 
-    with store() as x:
-        assert len(x) == 0
+    assert len(store.content) == 2
+    assert store.content['foo'] == 'bar'
+    assert store.content['nested']['baz'] == 123
 
-    store_ = JsonStore.make(filename)
-    assert is_ok(store_)
+    store_ = JsonStore(filename)
+    assert store_
     store_ = store_.unwrap()
 
-    with store_() as x:
-        assert len(x) == 0
-
-def test_no_transaction_exception_modifying_data_dry_run(tmp_path):
-    filename = os.path.join(tmp_path, 'test.json')
-    store = JsonStore.make(filename, dry_run=True)
-    assert is_ok(store)
-    store = store.unwrap()
-    with store() as x:
-        assert len(x) == 0
-
-        x['foo'] = 'bar'
-        x['nested'] = { 'baz': 123 }
-        assert x['foo'] == 'bar'
-        assert x['nested']['baz'] == 123
-
-    try:
-        with store.transaction() as x:
-            assert len(x) == 2
-            assert x['foo'] == 'bar'
-            assert x['nested']['baz'] == 123
-            x['nested']['baz'] = 321
-            raise RuntimeError()
-    except RuntimeError as e:
-        pass
-
-    with store() as x:
-        assert len(x) == 2
-        assert x['foo'] == 'bar'
-        assert x['nested']['baz'] == 123
-
-    store_ = JsonStore.make(filename)
-    assert is_ok(store_)
-    store_ = store_.unwrap()
-
-    with store_() as x:
-        assert len(x) == 0
+    assert len(store_.content) == 2
+    assert store_.content['foo'] == 'bar'
+    assert store_.content['nested']['baz'] == 123

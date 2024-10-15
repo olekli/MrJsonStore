@@ -1,23 +1,75 @@
 # mrjsonstore
 Simple, transparent on-disk JSON store using `atomicwrites`.
 
+## Basic Usage
+
+### Without context
+
 ```python
 store = JsonStore('example.json')
-with store() as x:
-    assert isinstance(x, dict)
-    x['woohoo'] = 'I am just a Python dictionary'
+assert isinstance(store.content, dict)
+store.content['woohoo'] = 'I am just a Python dictionary'
+result = store.commit()
+if not result:
+    print(f'There was a problem when writing: {result})
 ```
 
-Changes are written on context exit, regardless of exceptions that occurred.
-
-Unless a transaction is used:
+You can also use transactions...
 
 ```python
-with store.transaction() as x:
-  [ ... ]
-  raise RuntimeError()
+store = JsonStore('example.json')
+t = store.transaction()
+store.content['woohoo'] = 'I am just a Python dictionary'
+result = t.commit()
+if not result:
+    print(f'There was a problem when writing: {result})
 ```
 
-In that case any changes are rolled back on context exit.
+... and possibly roll them back:
 
-Does not yet support concurrency.
+```python
+store = JsonStore('example.json')
+store.content['woohoo'] = 'I am just a Python dictionary'
+t = store.transaction()
+store.content['woohoo'] = 'I am going to be rolled back!'
+t.rollback()
+assert store.content['woohoo'] == 'I am just a Python dictionary'
+```
+
+### With context
+
+```python
+store = JsonStore('example.json')
+with store.transaction() as t:
+    store.content['woohoo'] = 'I am just a Python dictionary'
+```
+
+Changes will be committed on context exit, unless there is an exception:
+
+```python
+store = JsonStore('example.json')
+store.content['woohoo'] = 'I am just a Python dictionary'
+with store.transaction() as t:
+    store.content['woohoo'] = 'I am going to be rolled back!'
+    raise RuntimeError()
+[...]
+assert store.content['woohoo'] == 'I am just a Python dictionary'
+```
+
+If you want to commit regardless of exceptions, you can choose not to rollback:
+
+```python
+store = JsonStore('example.json')
+store.content['woohoo'] = 'I am just a Python dictionary'
+with store.transaction(rollback=False) as t:
+    store.content['woohoo'] = 'I am not going to be rolled back!'
+    raise RuntimeError()
+[...]
+assert store.content['woohoo'] == 'I am not going to be rolled back!'
+```
+
+Changes will be committed to disk then.
+
+## TODO
+
+* Add support for concurrency?
